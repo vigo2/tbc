@@ -26,7 +26,9 @@ type Simulation struct {
 	testRands map[string]Rand
 
 	// Current Simulation State
-	pendingActions    []*PendingAction
+	pendingActions []*PendingAction
+	minIndex       int
+
 	pendingActionPool *paPool
 	CurrentTime       time.Duration // duration that has elapsed in the sim since starting
 
@@ -77,6 +79,8 @@ func NewSim(rsr proto.RaidSimRequest) *Simulation {
 		isTest:    simOptions.IsTest,
 		testRands: make(map[string]Rand),
 
+		pendingActions: make([]*PendingAction, 0, 16),
+
 		pendingActionPool: newPAPool(),
 	}
 }
@@ -120,7 +124,8 @@ func (sim *Simulation) reset() {
 	sim.Duration = sim.BaseDuration + time.Duration((sim.RandomFloat("sim duration") * float64(variation))) - sim.DurationVariation
 	sim.CurrentTime = 0.0
 
-	sim.pendingActions = make([]*PendingAction, 0, 64)
+	sim.pendingActions = make([]*PendingAction, 0, len(sim.pendingActions))
+	sim.minIndex = 0
 
 	sim.executePhase = false
 	sim.executePhaseCallbacks = []func(*Simulation){}
@@ -196,16 +201,53 @@ func (sim *Simulation) run() *proto.RaidSimResult {
 	return result
 }
 
+func (sim *Simulation) validatePAs() {
+	if len(sim.pendingActions) == 0 {
+		panic("pending actions is empty")
+	}
+
+	v := sim.pendingActions[sim.minIndex]
+	for _, c := range sim.pendingActions[1:] {
+		if c.NextActionAt < v.NextActionAt || (c.NextActionAt == v.NextActionAt && c.Priority > v.Priority) {
+			panic("smaller pa found")
+		}
+	}
+}
+
+func (sim *Simulation) updateMinIndex() {
+	if len(sim.pendingActions) == 0 {
+		sim.minIndex = 0
+		return
+	}
+
+	sim.minIndex = 0
+	v := sim.pendingActions[0]
+	for i, c := range sim.pendingActions[1:] {
+		if c.NextActionAt < v.NextActionAt || (c.NextActionAt == v.NextActionAt && c.Priority > v.Priority) {
+			sim.minIndex = i + 1
+			v = c
+		}
+	}
+
+	sim.validatePAs()
+}
+
 // RunOnce is the main event loop. It will run the simulation for number of seconds.
 func (sim *Simulation) runOnce() {
 	sim.reset()
 
-	for true {
+	for {
+		sim.validatePAs()
+
 		last := len(sim.pendingActions) - 1
-		pa := sim.pendingActions[last]
+		pa := sim.pendingActions[sim.minIndex]
+
+		sim.pendingActions[last], sim.pendingActions[sim.minIndex] = sim.pendingActions[sim.minIndex], sim.pendingActions[last]
 		sim.pendingActions = sim.pendingActions[:last]
+
 		if pa.cancelled {
 			sim.pendingActionPool.Put(pa)
+			sim.updateMinIndex()
 			continue
 		}
 
@@ -221,6 +263,8 @@ func (sim *Simulation) runOnce() {
 		}
 
 		pa.OnAction(sim)
+
+		sim.updateMinIndex()
 	}
 
 	for _, pa := range sim.pendingActions {
@@ -237,28 +281,43 @@ func (sim *Simulation) runOnce() {
 }
 
 func (sim *Simulation) AddPendingAction(pa *PendingAction) {
-	oldlen := len(sim.pendingActions)
-
-	// The logic to calculate the index to insert at can be replaced with sort.Search() which uses a binary search.
-	//   However I haven't found any cases yet in our simulator that it is faster.
-	var index = 0
-	for _, v := range sim.pendingActions {
-		if v.NextActionAt < pa.NextActionAt || (v.NextActionAt == pa.NextActionAt && v.Priority >= pa.Priority) {
-			break
-		}
-		index++
-	}
-
 	sim.pendingActions = append(sim.pendingActions, pa)
-	if index == oldlen { // if the insert was at the end, just return now.
-		return
-	} else if oldlen == 1 { // simple case we can just swap the two
-		sim.pendingActions[0], sim.pendingActions[1] = sim.pendingActions[1], sim.pendingActions[0]
-		return
+
+	if m := sim.pendingActions[sim.minIndex]; pa.NextActionAt < m.NextActionAt || (pa.NextActionAt == m.NextActionAt && pa.Priority > m.Priority) {
+		sim.minIndex = len(sim.pendingActions) - 1
 	}
 
-	copy(sim.pendingActions[index+1:], sim.pendingActions[index:])
-	sim.pendingActions[index] = pa
+	sim.validatePAs()
+
+	/*
+		sim.pendingActions = append(sim.pendingActions, pa)
+		for _, pa := range sim.pendingActions {
+
+		}
+
+		oldlen := len(sim.pendingActions)
+
+		// The logic to calculate the index to insert at can be replaced with sort.Search() which uses a binary search.
+		//   However I haven't found any cases yet in our simulator that it is faster.
+		var index = 0
+		for _, v := range sim.pendingActions {
+			if v.NextActionAt < pa.NextActionAt || (v.NextActionAt == pa.NextActionAt && v.Priority >= pa.Priority) {
+				break
+			}
+			index++
+		}
+
+		sim.pendingActions = append(sim.pendingActions, pa)
+		if index == oldlen { // if the insert was at the end, just return now.
+			return
+		} else if oldlen == 1 { // simple case we can just swap the two
+			sim.pendingActions[0], sim.pendingActions[1] = sim.pendingActions[1], sim.pendingActions[0]
+			return
+		}
+
+		copy(sim.pendingActions[index+1:], sim.pendingActions[index:])
+		sim.pendingActions[index] = pa
+	*/
 }
 
 // Advance moves time forward counting down auras, CDs, mana regen, etc
