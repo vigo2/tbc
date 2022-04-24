@@ -66,9 +66,9 @@ export const DemonSummon = {
 	values: [
 		{ color: '82e89d', value: Summon.NoSummon },
 		{ actionId: ActionId.fromSpellId(688), value: Summon.Imp },
-		{ actionId: ActionId.fromSpellId(697), value: Summon.Voidwalker },
+		// { actionId: ActionId.fromSpellId(697), value: Summon.Voidwalker },
 		{ actionId: ActionId.fromSpellId(712), value: Summon.Succubus },
-		{ actionId: ActionId.fromSpellId(691), value: Summon.Felhound },
+		// { actionId: ActionId.fromSpellId(691), value: Summon.Felhound },
 		{ actionId: ActionId.fromSpellId(30146), value: Summon.Felgaurd },
 	],
 	equals: (a: Summon, b: Summon) => a == b,
@@ -124,6 +124,24 @@ export const WarlockRotationConfig = {
 			setValue: (eventID: EventID, player: Player<Spec.SpecWarlock>, newValue: boolean) => {
 				const newRotation = player.getRotation();
 				newRotation.immolate = newValue;
+				player.setRotation(eventID, newRotation);
+			},
+		},
+	},
+	{
+		type: 'boolean' as const,
+		getModObject: (simUI: IndividualSimUI<any>) => simUI.player,
+		config: {
+			extraCssClasses: [
+				'corruption-picker',
+			],
+			label: 'Use Corruption',
+			labelTooltip: 'Use Corruption as the next cast after the dot expires.',
+			changedEvent: (player: Player<Spec.SpecWarlock>) => player.rotationChangeEmitter,
+			getValue: (player: Player<Spec.SpecWarlock>) => player.getRotation().corruption,
+			setValue: (eventID: EventID, player: Player<Spec.SpecWarlock>, newValue: boolean) => {
+				const newRotation = player.getRotation();
+				newRotation.corruption = newValue;
 				player.setRotation(eventID, newRotation);
 			},
 		},

@@ -47,7 +47,10 @@ func NewDpsWarrior(character core.Character, options proto.Player) *DpsWarrior {
 
 	war.EnableRageBar(warOptions.Options.StartingRage, core.TernaryFloat64(war.Talents.EndlessRage, 1.25, 1), func(sim *core.Simulation) {
 		if war.GCD.IsReady(sim) {
-			war.doRotation(sim)
+			war.TryUseCooldowns(sim)
+			if war.GCD.IsReady(sim) {
+				war.doRotation(sim)
+			}
 		}
 	})
 	war.EnableAutoAttacks(war, core.AutoAttackOptions{

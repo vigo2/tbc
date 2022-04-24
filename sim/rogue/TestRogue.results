@@ -222,7 +222,7 @@ dps_results: {
 dps_results: {
  key: "TestRogue-AllItems-Deathmantle"
  value: {
-  dps: 1318.9149175978955
+  dps: 1319.669776367859
  }
 }
 dps_results: {
@@ -876,7 +876,7 @@ dps_results: {
 dps_results: {
  key: "TestRogue-Settings-Human-P1-Hemo-FullBuffs-LongMultiTarget"
  value: {
-  dps: 1766.4429566701242
+  dps: 1766.442956670124
  }
 }
 dps_results: {

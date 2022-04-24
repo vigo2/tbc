@@ -102,7 +102,7 @@ dps_results: {
 dps_results: {
  key: "TestEnhancement-AllItems-BlackenedNaaruSliver-34427"
  value: {
-  dps: 1989.8538680356776
+  dps: 1992.6422412856855
  }
 }
 dps_results: {
@@ -816,7 +816,7 @@ dps_results: {
 dps_results: {
  key: "TestEnhancement-Settings-Troll10-P2-Basic-NoBuffs-LongMultiTarget"
  value: {
-  dps: 1061.2553646584447
+  dps: 1061.255364658445
  }
 }
 dps_results: {
