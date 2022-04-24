@@ -1,8 +1,6 @@
 package core
 
 import (
-	"time"
-
 	"github.com/wowsims/tbc/sim/core/stats"
 )
 
@@ -114,7 +112,7 @@ func (unit *Unit) reset(sim *Simulation) {
 }
 
 // Advance moves time forward counting down auras, CDs, mana regen, etc
-func (unit *Unit) advance(sim *Simulation, elapsedTime time.Duration) {
+func (unit *Unit) advance(sim *Simulation) {
 	unit.auraTracker.advance(sim)
 }
 

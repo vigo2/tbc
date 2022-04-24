@@ -190,7 +190,7 @@ func (sim *Simulation) initManaTickAction() {
 		NextActionAt: interval,
 		Priority:     ActionPriorityRegen,
 	}
-	pa.OnAction = func(sim *Simulation) {
+	pa.OnAction = func(sim *Simulation) bool {
 		for _, player := range playersWithManaBars {
 			player.GetCharacter().ManaTick(sim)
 			player.OnManaTick(sim)
@@ -202,9 +202,8 @@ func (sim *Simulation) initManaTickAction() {
 				petAgent.OnManaTick(sim)
 			}
 		}
-
 		pa.NextActionAt = sim.CurrentTime + interval
-		sim.AddPendingAction(pa)
+		return true
 	}
 	sim.AddPendingAction(pa)
 }

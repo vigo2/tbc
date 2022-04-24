@@ -221,7 +221,9 @@ func (paladin *Paladin) UpdateSeal(sim *core.Simulation, newSeal *core.Aura) {
 		if sim.Options.Iterations == 1 {
 			sim.AddPendingAction(&core.PendingAction{
 				NextActionAt: expiresAt,
-				OnAction:     func(_ *core.Simulation) {},
+				OnAction: func(_ *core.Simulation) bool {
+					return false
+				},
 			})
 		}
 	} else if paladin.CurrentSeal != nil {

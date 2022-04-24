@@ -101,8 +101,8 @@ func (pet *Pet) reset(sim *Simulation, agent Agent) {
 	pet.Character.reset(sim, agent)
 	pet.enabled = false
 }
-func (pet *Pet) advance(sim *Simulation, elapsedTime time.Duration) {
-	pet.Character.advance(sim, elapsedTime)
+func (pet *Pet) advance(sim *Simulation) {
+	pet.Character.advance(sim)
 }
 func (pet *Pet) doneIteration(sim *Simulation) {
 	pet.Character.doneIteration(sim)
@@ -159,8 +159,9 @@ func (pet *Pet) EnableWithTimeout(sim *Simulation, petAgent PetAgent, petDuratio
 
 	pet.timeoutAction = &PendingAction{
 		NextActionAt: sim.CurrentTime + petDuration,
-		OnAction: func(sim *Simulation) {
+		OnAction: func(sim *Simulation) bool {
 			pet.Disable(sim)
+			return false
 		},
 	}
 	sim.AddPendingAction(pet.timeoutAction)

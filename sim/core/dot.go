@@ -9,7 +9,7 @@ type TickEffects func(*Simulation, *Spell) func()
 type Dot struct {
 	Spell *Spell
 
-	// Embed Aura so we can use IsActive/Refresh/etc directly.
+	// Embed Aura, so we can use IsActive/Refresh/etc directly.
 	*Aura
 
 	NumberOfTicks int           // number of ticks over the whole duration
@@ -37,7 +37,7 @@ func (dot *Dot) Apply(sim *Simulation) {
 	if dot.AffectedByCastSpeed {
 		castSpeed := dot.Spell.Character.CastSpeed()
 		dot.tickPeriod = time.Duration(float64(dot.TickLength) / castSpeed)
-		dot.Aura.Duration = dot.tickPeriod * time.Duration(dot.NumberOfTicks)
+		dot.Aura.Duration = dot.tickPeriod*time.Duration(dot.NumberOfTicks) + 1
 	}
 	dot.Aura.Activate(sim)
 }
@@ -53,47 +53,42 @@ func (dot *Dot) RecomputeAuraDuration() {
 	if dot.AffectedByCastSpeed {
 		castSpeed := dot.Spell.Character.CastSpeed()
 		dot.tickPeriod = time.Duration(float64(dot.TickLength) / castSpeed)
-		dot.Aura.Duration = dot.tickPeriod * time.Duration(dot.NumberOfTicks)
+		dot.Aura.Duration = dot.tickPeriod*time.Duration(dot.NumberOfTicks) + 1
 	} else {
 		dot.tickPeriod = dot.TickLength
-		dot.Aura.Duration = dot.tickPeriod * time.Duration(dot.NumberOfTicks)
+		dot.Aura.Duration = dot.tickPeriod*time.Duration(dot.NumberOfTicks) + 1
 	}
+}
+
+func (dot *Dot) tick(sim *Simulation) {
+	dot.lastTickTime = sim.CurrentTime
+	dot.TickCount++
+	dot.tickFn()
 }
 
 func NewDot(config Dot) *Dot {
 	dot := &Dot{}
 	*dot = config
 
-	basePeriodicOptions := PeriodicActionOptions{
-		OnAction: func(sim *Simulation) {
-			if dot.lastTickTime != sim.CurrentTime {
-				dot.lastTickTime = sim.CurrentTime
-				dot.TickCount++
-				dot.tickFn()
-			}
-		},
-		CleanUp: func(sim *Simulation) {
-			// In certain cases, the last tick and the dot aura expiration can happen in
-			// different orders, so we might need to apply the last tick.
-			if dot.tickAction.NextActionAt == sim.CurrentTime {
-				if dot.lastTickTime != sim.CurrentTime {
-					dot.lastTickTime = sim.CurrentTime
-					dot.TickCount++
-					dot.tickFn()
-				}
-			}
-		},
-	}
-
 	dot.tickPeriod = dot.TickLength
-	dot.Aura.Duration = dot.TickLength * time.Duration(dot.NumberOfTicks)
+	dot.Aura.Duration = dot.TickLength*time.Duration(dot.NumberOfTicks) + 1
 
 	dot.Aura.OnGain = func(aura *Aura, sim *Simulation) {
 		dot.tickFn = dot.TickEffects(sim, dot.Spell)
 
-		periodicOptions := basePeriodicOptions
-		periodicOptions.Period = dot.tickPeriod
-		dot.tickAction = NewPeriodicAction(sim, periodicOptions)
+		pa := &PendingAction{
+			NextActionAt: sim.CurrentTime + dot.tickPeriod,
+		}
+		pa.OnAction = func(sim *Simulation) bool {
+			if dot.lastTickTime == sim.CurrentTime {
+				return false
+			}
+			dot.tick(sim)
+			pa.NextActionAt = sim.CurrentTime + dot.tickPeriod
+			return true
+		}
+
+		dot.tickAction = pa
 		sim.AddPendingAction(dot.tickAction)
 	}
 	dot.Aura.OnExpire = func(aura *Aura, sim *Simulation) {

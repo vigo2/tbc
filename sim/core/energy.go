@@ -108,7 +108,7 @@ func (eb *energyBar) ResetEnergyTick(sim *Simulation) {
 	eb.character.TryUseCooldowns(sim)
 	eb.onEnergyGain(sim)
 
-	eb.newTickAction(sim, false)
+	eb.tickAction.NextActionAt = sim.CurrentTime + EnergyTickDuration
 }
 
 func (eb *energyBar) SpendComboPoints(sim *Simulation, actionID ActionID) {
@@ -119,30 +119,22 @@ func (eb *energyBar) SpendComboPoints(sim *Simulation, actionID ActionID) {
 	eb.comboPoints = 0
 }
 
-func (eb *energyBar) newTickAction(sim *Simulation, randomTickTime bool) {
-	if eb.tickAction != nil {
-		eb.tickAction.Cancel(sim)
-	}
+func (eb *energyBar) newTickAction(sim *Simulation) {
+	nextTickDuration := time.Duration(sim.RandomFloat("Energy Tick") * float64(EnergyTickDuration))
 
-	nextTickDuration := EnergyTickDuration
-	if randomTickTime {
-		nextTickDuration = time.Duration(sim.RandomFloat("Energy Tick") * float64(EnergyTickDuration))
-	}
-
-	pa := &PendingAction{
+	eb.tickAction = &PendingAction{
 		NextActionAt: sim.CurrentTime + nextTickDuration,
 		Priority:     ActionPriorityRegen,
-	}
-	pa.OnAction = func(sim *Simulation) {
-		eb.addEnergyInternal(sim, EnergyPerTick*eb.EnergyTickMultiplier, ActionID{OtherID: proto.OtherAction_OtherActionEnergyRegen})
-		eb.character.TryUseCooldowns(sim)
-		eb.onEnergyGain(sim)
+		OnAction: func(sim *Simulation) bool {
+			eb.addEnergyInternal(sim, EnergyPerTick*eb.EnergyTickMultiplier, ActionID{OtherID: proto.OtherAction_OtherActionEnergyRegen})
+			eb.character.TryUseCooldowns(sim)
+			eb.onEnergyGain(sim)
 
-		pa.NextActionAt = sim.CurrentTime + EnergyTickDuration
-		sim.AddPendingAction(pa)
+			eb.tickAction.NextActionAt = sim.CurrentTime + EnergyTickDuration
+			return true
+		},
 	}
-	eb.tickAction = pa
-	sim.AddPendingAction(pa)
+	sim.AddPendingAction(eb.tickAction)
 }
 
 func (eb *energyBar) reset(sim *Simulation) {
@@ -153,5 +145,5 @@ func (eb *energyBar) reset(sim *Simulation) {
 	eb.currentEnergy = eb.maxEnergy
 	eb.comboPoints = 0
 	eb.EnergyTickMultiplier = 1
-	eb.newTickAction(sim, true)
+	eb.newTickAction(sim)
 }

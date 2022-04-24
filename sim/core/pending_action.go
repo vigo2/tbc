@@ -24,23 +24,12 @@ const (
 
 type PendingAction struct {
 	NextActionAt time.Duration
-	Priority     ActionPriority
+	OnAction     func(*Simulation) bool
 
-	OnAction func(*Simulation)
-	CleanUp  func(*Simulation)
-
+	Priority  ActionPriority
 	cancelled bool
 }
 
 func (pa *PendingAction) Cancel(sim *Simulation) {
-	if pa.cancelled {
-		return
-	}
-
-	if pa.CleanUp != nil {
-		pa.CleanUp(sim)
-		pa.CleanUp = nil
-	}
-
 	pa.cancelled = true
 }

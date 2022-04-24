@@ -8,12 +8,13 @@ import (
 func (character *Character) newGCDAction(sim *Simulation, agent Agent) *PendingAction {
 	return &PendingAction{
 		Priority: ActionPriorityGCD,
-		OnAction: func(sim *Simulation) {
+		OnAction: func(sim *Simulation) bool {
 			character := agent.GetCharacter()
 			character.TryUseCooldowns(sim)
 			if character.GCD.IsReady(sim) {
 				agent.OnGCDReady(sim)
 			}
+			return false
 		},
 	}
 }
@@ -24,16 +25,15 @@ func (character *Character) newHardcastAction(sim *Simulation) {
 		character.hardcastAction.Cancel(sim)
 	}
 
-	pa := &PendingAction{
+	character.hardcastAction = &PendingAction{
 		NextActionAt: character.Hardcast.Expires,
-		OnAction: func(sim *Simulation) {
+		OnAction: func(sim *Simulation) bool {
 			// Don't need to do anything, the Advance() call will take care of the hardcast.
 			character.hardcastAction = nil
+			return false
 		},
 	}
-
-	character.hardcastAction = pa
-	sim.AddPendingAction(pa)
+	sim.AddPendingAction(character.hardcastAction)
 }
 
 func (character *Character) NextGCDAt() time.Duration {

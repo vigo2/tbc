@@ -13,33 +13,26 @@ type PeriodicActionOptions struct {
 	NumTicks int
 
 	OnAction func(*Simulation)
-	CleanUp  func(*Simulation)
 }
 
 func NewPeriodicAction(sim *Simulation, options PeriodicActionOptions) *PendingAction {
 	pa := &PendingAction{
 		NextActionAt: sim.CurrentTime + options.Period,
-		//Priority:     ActionPriorityDOT,
 	}
 
 	tickIndex := 0
 
-	pa.OnAction = func(sim *Simulation) {
+	pa.OnAction = func(sim *Simulation) bool {
 		options.OnAction(sim)
 		tickIndex++
 
-		if options.NumTicks == 0 || tickIndex < options.NumTicks {
-			// Refresh action.
-			pa.NextActionAt = sim.CurrentTime + options.Period
-			sim.AddPendingAction(pa)
-		} else {
-			pa.Cancel(sim)
+		if options.NumTicks != 0 && tickIndex >= options.NumTicks {
+			return false
 		}
-	}
-	pa.CleanUp = func(sim *Simulation) {
-		if options.CleanUp != nil {
-			options.CleanUp(sim)
-		}
+
+		// Refresh action.
+		pa.NextActionAt = sim.CurrentTime + options.Period
+		return true
 	}
 
 	return pa

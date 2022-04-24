@@ -232,6 +232,7 @@ var castersWithResto = &proto.Party{
 }
 
 func BenchmarkSimulate(b *testing.B) {
+	b.ReportAllocs()
 	rsr := &proto.RaidSimRequest{
 		Raid: &proto.Raid{
 			Parties: []*proto.Party{

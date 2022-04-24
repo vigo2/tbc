@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 	"strings"
 	"time"
@@ -112,7 +113,7 @@ func (sim *Simulation) reset() {
 	}
 	variation := sim.DurationVariation * 2
 
-	sim.Duration = sim.BaseDuration + time.Duration((sim.RandomFloat("sim duration") * float64(variation))) - sim.DurationVariation
+	sim.Duration = sim.BaseDuration + time.Duration(sim.RandomFloat("sim duration")*float64(variation)) - sim.DurationVariation
 	sim.CurrentTime = 0.0
 
 	sim.pendingActions = make([]*PendingAction, 0, 64)
@@ -134,18 +135,20 @@ func (sim *Simulation) reset() {
 // Run runs the simulation for the configured number of iterations, and
 // collects all the metrics together.
 func (sim *Simulation) run() *proto.RaidSimResult {
+	t := time.Now()
+
 	logsBuffer := &strings.Builder{}
 	if sim.Options.Debug || sim.Options.DebugFirstIteration {
 		sim.Log = func(message string, vals ...interface{}) {
-			logsBuffer.WriteString(fmt.Sprintf("[%0.2f] "+message+"\n", append([]interface{}{sim.CurrentTime.Seconds()}, vals...)...))
+			logsBuffer.WriteString(fmt.Sprintf("[%0.2f] %s\n", sim.CurrentTime.Seconds(), fmt.Sprintf(message, vals...)))
 		}
 	}
 
 	// Uncomment this to print logs directly to console.
 	// sim.Options.Debug = true
-	// sim.Log = func(message string, vals ...interface{}) {
-	// 	fmt.Printf(fmt.Sprintf("[%0.1f] "+message+"\n", append([]interface{}{sim.CurrentTime.Seconds()}, vals...)...))
-	// }
+	//sim.Log = func(message string, vals ...interface{}) {
+	//	fmt.Printf(fmt.Sprintf("[%0.1f] %s\n", sim.CurrentTime.Seconds(), fmt.Sprintf(message, vals...)))
+	//}
 
 	for _, target := range sim.encounter.Targets {
 		target.init(sim)
@@ -193,7 +196,29 @@ func (sim *Simulation) run() *proto.RaidSimResult {
 		sim.ProgressReport(&proto.ProgressMetrics{TotalIterations: sim.Options.Iterations, CompletedIterations: sim.Options.Iterations, Dps: result.RaidMetrics.Dps.Avg, FinalRaidResult: result})
 	}
 
+	if sim.Options.Iterations > 100 {
+		log.Printf("running %d iterations took %d ms\n", sim.Options.Iterations, time.Since(t).Milliseconds())
+	}
+
 	return result
+}
+
+func (sim *Simulation) findNextAction() (*PendingAction, int) {
+	pa := sim.pendingActions[0]
+	idx := 0
+	for i, v := range sim.pendingActions[1:] {
+		if v.NextActionAt < pa.NextActionAt || (v.NextActionAt == pa.NextActionAt && v.Priority >= pa.Priority) {
+			pa = v
+			idx = i + 1
+		}
+	}
+	return pa, idx
+}
+
+func (sim *Simulation) removeActionAt(idx int) {
+	last := len(sim.pendingActions) - 1
+	sim.pendingActions[idx], sim.pendingActions[last] = sim.pendingActions[last], sim.pendingActions[idx]
+	sim.pendingActions = sim.pendingActions[:last]
 }
 
 // RunOnce is the main event loop. It will run the simulation for number of seconds.
@@ -201,27 +226,23 @@ func (sim *Simulation) runOnce() {
 	sim.reset()
 
 	for {
-		last := len(sim.pendingActions) - 1
-		pa := sim.pendingActions[last]
-		sim.pendingActions = sim.pendingActions[:last]
-		if pa.cancelled {
-			continue
-		}
+		pa, idx := sim.findNextAction()
 
 		if pa.NextActionAt > sim.Duration {
 			break
 		}
 
-		if pa.NextActionAt > sim.CurrentTime {
-			sim.advance(pa.NextActionAt - sim.CurrentTime)
+		if pa.cancelled {
+			sim.removeActionAt(idx)
+			continue
 		}
 
-		pa.OnAction(sim)
-	}
+		if pa.NextActionAt > sim.CurrentTime {
+			sim.advance(pa.NextActionAt)
+		}
 
-	for _, pa := range sim.pendingActions {
-		if pa.CleanUp != nil {
-			pa.CleanUp(sim)
+		if !pa.OnAction(sim) {
+			sim.removeActionAt(idx)
 		}
 	}
 
@@ -230,20 +251,12 @@ func (sim *Simulation) runOnce() {
 }
 
 func (sim *Simulation) AddPendingAction(pa *PendingAction) {
-	for index, v := range sim.pendingActions {
-		if v.NextActionAt < pa.NextActionAt || (v.NextActionAt == pa.NextActionAt && v.Priority >= pa.Priority) {
-			sim.pendingActions = append(sim.pendingActions, pa)
-			copy(sim.pendingActions[index+1:], sim.pendingActions[index:])
-			sim.pendingActions[index] = pa
-			return
-		}
-	}
 	sim.pendingActions = append(sim.pendingActions, pa)
 }
 
 // Advance moves time forward counting down auras, CDs, mana regen, etc
-func (sim *Simulation) advance(elapsedTime time.Duration) {
-	sim.CurrentTime += elapsedTime
+func (sim *Simulation) advance(nextTime time.Duration) {
+	sim.CurrentTime = nextTime
 
 	if !sim.executePhase && sim.CurrentTime >= sim.encounter.executePhaseBegins {
 		sim.executePhase = true
@@ -254,12 +267,12 @@ func (sim *Simulation) advance(elapsedTime time.Duration) {
 
 	for _, party := range sim.Raid.Parties {
 		for _, agent := range party.Players {
-			agent.GetCharacter().advance(sim, elapsedTime)
+			agent.GetCharacter().advance(sim)
 		}
 	}
 
 	for _, target := range sim.encounter.Targets {
-		target.Advance(sim, elapsedTime)
+		target.Advance(sim)
 	}
 }
 

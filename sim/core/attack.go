@@ -293,26 +293,20 @@ func (aa *AutoAttacks) resetAutoSwing(sim *Simulation) {
 	}
 
 	if aa.autoSwingAction != nil {
-		aa.autoSwingAction.Cancel(sim)
+		aa.autoSwingAction.NextActionAt = aa.NextAttackAt()
+		return
 	}
 
-	pa := &PendingAction{
+	aa.autoSwingAction = &PendingAction{
 		NextActionAt: aa.NextAttackAt(),
 		Priority:     ActionPriorityAuto,
+		OnAction: func(sim *Simulation) bool {
+			aa.SwingMelee(sim, sim.GetPrimaryTarget())
+			aa.autoSwingAction.NextActionAt = aa.NextAttackAt()
+			return true
+		},
 	}
-
-	pa.OnAction = func(sim *Simulation) {
-		aa.SwingMelee(sim, sim.GetPrimaryTarget())
-		pa.NextActionAt = aa.NextAttackAt()
-
-		// Cancelled means we made a new one because of a swing speed change.
-		if !pa.cancelled {
-			sim.AddPendingAction(pa)
-		}
-	}
-
-	aa.autoSwingAction = pa
-	sim.AddPendingAction(pa)
+	sim.AddPendingAction(aa.autoSwingAction)
 }
 
 // Stops the auto swing action for the rest of the iteration. Used for pets

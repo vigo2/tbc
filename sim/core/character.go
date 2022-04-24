@@ -450,18 +450,16 @@ func (character *Character) reset(sim *Simulation, agent Agent) {
 }
 
 // Advance moves time forward counting down auras, CDs, mana regen, etc
-func (character *Character) advance(sim *Simulation, elapsedTime time.Duration) {
-	character.Unit.advance(sim, elapsedTime)
+func (character *Character) advance(sim *Simulation) {
+	character.Unit.advance(sim)
 
 	if character.Hardcast.Expires != 0 && character.Hardcast.Expires <= sim.CurrentTime {
 		character.Hardcast.Expires = 0
 		character.Hardcast.OnExpire(sim)
 	}
 
-	if len(character.Pets) > 0 {
-		for _, petAgent := range character.Pets {
-			petAgent.GetPet().advance(sim, elapsedTime)
-		}
+	for _, petAgent := range character.Pets {
+		petAgent.GetPet().advance(sim)
 	}
 }
 
@@ -525,16 +523,14 @@ func (character *Character) HasRangedWeapon() bool {
 }
 
 // Returns the hands that the item is equipped in, as (MH, OH).
-func (character *Character) GetWeaponHands(itemID int32) (bool, bool) {
-	mh := false
-	oh := false
+func (character *Character) GetWeaponHands(itemID int32) (mh bool, oh bool) {
 	if weapon := character.GetMHWeapon(); weapon != nil && weapon.ID == itemID {
 		mh = true
 	}
 	if weapon := character.GetOHWeapon(); weapon != nil && weapon.ID == itemID {
 		oh = true
 	}
-	return mh, oh
+	return
 }
 
 func (character *Character) doneIteration(sim *Simulation) {

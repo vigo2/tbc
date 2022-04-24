@@ -1,7 +1,6 @@
 package retribution
 
 import (
-	"sort"
 	"time"
 
 	"github.com/wowsims/tbc/sim/core"
@@ -150,7 +149,7 @@ func (ret *RetributionPaladin) openingRotation(sim *core.Simulation) {
 	}
 }
 
-func (ret *RetributionPaladin) ActRotation(sim *core.Simulation) {
+func (ret *RetributionPaladin) ActRotation(sim *core.Simulation) bool {
 	// Setup
 	target := sim.GetPrimaryTarget()
 
@@ -201,42 +200,32 @@ func (ret *RetributionPaladin) ActRotation(sim *core.Simulation) {
 	}
 
 	// Determine when next action is available
-	// Throw everything into an array then filter and sort compared to doing individual comparisons
-	events := []time.Duration{
-		nextSwingAt,
+	nextEventAt := nextSwingAt
+	for _, t := range []time.Duration{
 		nextSwingAt - twistWindow,
 		ret.GCD.ReadyAt(),
 		ret.JudgementOfWisdom.CD.ReadyAt(),
 		ret.CrusaderStrike.CD.ReadyAt(),
-	}
-
-	// Time has to move forward... so exclude any events that are at current time
-	n := 0
-	for _, elem := range events {
-		if elem > sim.CurrentTime {
-			events[n] = elem
-			n++
+	} {
+		if t > sim.CurrentTime && t < nextEventAt {
+			nextEventAt = t
 		}
 	}
 
-	filteredEvents := events[:n]
-
-	// Sort it to get minimum element
-	sort.Slice(filteredEvents, func(i, j int) bool { return events[i] < events[j] })
-
-	// If the next action is  the GCD, just return
-	if filteredEvents[0] == ret.GCD.ReadyAt() {
-		return
+	// If the next action is the GCD, just return
+	if nextEventAt == ret.GCD.ReadyAt() {
+		return false
 	}
 
 	// Otherwise add a pending action for the next time
 	pa := &core.PendingAction{
 		Priority:     core.ActionPriorityLow,
 		OnAction:     ret.ActRotation,
-		NextActionAt: filteredEvents[0],
+		NextActionAt: nextEventAt,
 	}
 
 	sim.AddPendingAction(pa)
+	return false
 }
 
 func (ret *RetributionPaladin) useFillers(sim *core.Simulation, target *core.Target, sobActive bool) {

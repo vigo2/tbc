@@ -77,23 +77,20 @@ func (fb *focusBar) reset(sim *core.Simulation) {
 
 	fb.currentFocus = MaxFocus
 
-	pa := &core.PendingAction{
+	fb.tickAction = &core.PendingAction{
 		Priority:     core.ActionPriorityRegen,
 		NextActionAt: tickDuration,
+		OnAction: func(sim *core.Simulation) bool {
+			fb.AddFocus(sim, fb.focusPerTick, core.ActionID{OtherID: proto.OtherAction_OtherActionFocusRegen})
+			fb.tickAction.NextActionAt = sim.CurrentTime + tickDuration
+			return true
+		},
 	}
-	pa.OnAction = func(sim *core.Simulation) {
-		fb.AddFocus(sim, fb.focusPerTick, core.ActionID{OtherID: proto.OtherAction_OtherActionFocusRegen})
-
-		pa.NextActionAt = sim.CurrentTime + tickDuration
-		sim.AddPendingAction(pa)
-	}
-	fb.tickAction = pa
-	sim.AddPendingAction(pa)
+	sim.AddPendingAction(fb.tickAction)
 }
 
 func (fb *focusBar) Cancel(sim *core.Simulation) {
 	if fb.tickAction != nil {
 		fb.tickAction.Cancel(sim)
-		fb.tickAction = nil
 	}
 }

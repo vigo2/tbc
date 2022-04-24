@@ -126,8 +126,8 @@ func (target *Target) Reset(sim *Simulation) {
 	target.Unit.reset(sim)
 }
 
-func (target *Target) Advance(sim *Simulation, elapsedTime time.Duration) {
-	target.Unit.advance(sim, elapsedTime)
+func (target *Target) Advance(sim *Simulation) {
+	target.Unit.advance(sim)
 }
 
 func (target *Target) doneIteration(sim *Simulation) {
