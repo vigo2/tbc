@@ -2,8 +2,6 @@ package core
 
 import (
 	"fmt"
-	"time"
-
 	"github.com/wowsims/tbc/sim/core/items"
 	"github.com/wowsims/tbc/sim/core/proto"
 	"github.com/wowsims/tbc/sim/core/stats"
@@ -25,23 +23,11 @@ type Character struct {
 	// Pets owned by this Character.
 	Pets []PetAgent
 
-	rageBar
-	energyBar
-
 	// Consumables this Character will be using.
 	Consumes proto.Consumes
 
 	// Base stats for this Character.
 	baseStats stats.Stats
-
-	// Cast speed without any temporary effects.
-	initialCastSpeed float64
-
-	// Melee swing speed without any temporary effects.
-	initialMeleeSwingSpeed float64
-
-	// Ranged swing speed without any temporary effects.
-	initialRangedSwingSpeed float64
 
 	// Provides stat dependency management behavior.
 	stats.StatDependencyManager
@@ -55,15 +41,6 @@ type Character struct {
 	// This character's index within its party [0-4].
 	PartyIndex int
 
-	// Used for applying the effects of hardcast / channeled spells at a later time.
-	// By definition there can be only 1 hardcast spell being cast at any moment.
-	Hardcast Hardcast
-	//Hardcast PendingAction
-
-	// AutoAttacks is the manager for auto attack swings.
-	// Must be enabled to use "EnableAutoAttacks()"
-	AutoAttacks AutoAttacks
-
 	// Total amount of remaining additional mana expected for the current sim iteration,
 	// beyond this Character's mana pool. This should include mana potions / runes /
 	// innervates / etc.
@@ -73,21 +50,6 @@ type Character struct {
 	// a MH imbue.
 	// TODO: Figure out a cleaner way to do this.
 	HasMHWeaponImbue bool
-
-	// GCD-related PendingActions for this character.
-	gcdAction        *PendingAction
-	gcdActionInvoked bool
-	gcdActionQueued  bool
-
-	hardcastAction *PendingAction
-
-	// Fields related to waiting for certain events to happen.
-	waitingForMana float64
-	waitStartTime  time.Duration
-
-	// Cached mana return values per tick.
-	manaTickWhileCasting    float64
-	manaTickWhileNotCasting float64
 
 	defensiveTrinketCD *Timer
 	offensiveTrinketCD *Timer
@@ -252,93 +214,8 @@ func (character *Character) AddStat(stat stats.Stat, amount float64) {
 	}
 }
 
-func (character *Character) AddMeleeHaste(sim *Simulation, amount float64) {
-	if amount > 0 {
-		mod := 1 + (amount / (HasteRatingPerHastePercent * 100))
-		character.AutoAttacks.ModifySwingTime(sim, mod)
-	} else {
-		mod := 1 / (1 + (-amount / (HasteRatingPerHastePercent * 100)))
-		character.AutoAttacks.ModifySwingTime(sim, mod)
-	}
-	character.stats[stats.MeleeHaste] += amount
-
-	// Could add melee haste to pets too, but not aware of any pets that scale with
-	// owner's melee haste.
-}
-
-// MultiplyMeleeSpeed will alter the attack speed multiplier and change swing speed of all autoattack swings in progress.
-func (character *Character) MultiplyMeleeSpeed(sim *Simulation, amount float64) {
-	character.PseudoStats.MeleeSpeedMultiplier *= amount
-	character.AutoAttacks.ModifySwingTime(sim, amount)
-}
-
-func (character *Character) MultiplyRangedSpeed(sim *Simulation, amount float64) {
-	character.PseudoStats.RangedSpeedMultiplier *= amount
-}
-
-// Helper for when both MultiplyMeleeSpeed and MultiplyRangedSpeed are needed.
-func (character *Character) MultiplyAttackSpeed(sim *Simulation, amount float64) {
-	character.PseudoStats.MeleeSpeedMultiplier *= amount
-	character.PseudoStats.RangedSpeedMultiplier *= amount
-	character.AutoAttacks.ModifySwingTime(sim, amount)
-}
-
-func (character *Character) GetInitialStat(stat stats.Stat) float64 {
-	return character.initialStats[stat]
-}
 func (character *Character) GetBaseStats() stats.Stats {
 	return character.baseStats
-}
-func (character *Character) GetStats() stats.Stats {
-	return character.stats
-}
-func (character *Character) GetStat(stat stats.Stat) float64 {
-	return character.stats[stat]
-}
-
-// Returns whether the indicates stat is currently modified by a temporary bonus.
-func (character *Character) HasTemporaryBonusForStat(stat stats.Stat) bool {
-	return character.initialStats[stat] != character.stats[stat]
-}
-
-// Returns if spell casting has any temporary increases active.
-func (character *Character) HasTemporarySpellCastSpeedIncrease() bool {
-	return character.HasTemporaryBonusForStat(stats.SpellHaste) ||
-		character.PseudoStats.CastSpeedMultiplier != 1
-}
-
-// Returns if melee swings have any temporary increases active.
-func (character *Character) HasTemporaryMeleeSwingSpeedIncrease() bool {
-	return character.SwingSpeed() != character.initialMeleeSwingSpeed
-}
-
-// Returns if ranged swings have any temporary increases active.
-func (character *Character) HasTemporaryRangedSwingSpeedIncrease() bool {
-	return character.RangedSwingSpeed() != character.initialRangedSwingSpeed
-}
-
-func (character *Character) InitialCastSpeed() float64 {
-	return character.initialCastSpeed
-}
-
-func (character *Character) SpellGCD() time.Duration {
-	return MaxDuration(GCDMin, time.Duration(float64(GCDDefault)/character.CastSpeed()))
-}
-
-func (character *Character) CastSpeed() float64 {
-	return character.PseudoStats.CastSpeedMultiplier * (1 + (character.stats[stats.SpellHaste] / (HasteRatingPerHastePercent * 100)))
-}
-
-func (character *Character) ApplyCastSpeed(dur time.Duration) time.Duration {
-	return time.Duration(float64(dur) / character.CastSpeed())
-}
-
-func (character *Character) SwingSpeed() float64 {
-	return character.PseudoStats.MeleeSpeedMultiplier * (1 + (character.stats[stats.MeleeHaste] / (HasteRatingPerHastePercent * 100)))
-}
-
-func (character *Character) RangedSwingSpeed() float64 {
-	return character.PseudoStats.RangedSpeedMultiplier * (1 + (character.stats[stats.MeleeHaste] / (HasteRatingPerHastePercent * 100)))
 }
 
 // Returns the crit multiplier for a spell.
@@ -414,11 +291,6 @@ func (character *Character) Finalize(raid *Raid) {
 
 	character.Unit.finalize()
 
-	// All stats added up to this point are part of the 'initial' stats.
-	character.initialCastSpeed = character.CastSpeed()
-	character.initialMeleeSwingSpeed = character.SwingSpeed()
-	character.initialRangedSwingSpeed = character.RangedSwingSpeed()
-
 	character.majorCooldownManager.finalize(character)
 
 	for _, petAgent := range character.Pets {
@@ -433,7 +305,7 @@ func (character *Character) init(sim *Simulation, agent Agent) {
 
 func (character *Character) reset(sim *Simulation, agent Agent) {
 	character.majorCooldownManager.reset(sim)
-	character.Unit.reset(sim)
+	character.Unit.reset(sim, agent)
 
 	character.ExpectedBonusMana = 0
 	character.UpdateManaRegenRates()
@@ -447,8 +319,6 @@ func (character *Character) reset(sim *Simulation, agent Agent) {
 		petAgent.GetPet().reset(sim, petAgent)
 	}
 
-	character.EnableGCDTimer(sim, agent)
-
 	agent.Reset(sim)
 }
 
@@ -456,13 +326,10 @@ func (character *Character) reset(sim *Simulation, agent Agent) {
 func (character *Character) advance(sim *Simulation) {
 	character.Unit.advance(sim)
 
-	if character.Hardcast.Expires != 0 && character.Hardcast.Expires <= sim.CurrentTime {
-		character.Hardcast.Expires = 0
-		character.Hardcast.OnExpire(sim)
-	}
-
-	for _, petAgent := range character.Pets {
-		petAgent.GetPet().advance(sim)
+	if len(character.Pets) > 0 {
+		for _, petAgent := range character.Pets {
+			petAgent.GetPet().advance(sim)
+		}
 	}
 }
 
@@ -526,14 +393,16 @@ func (character *Character) HasRangedWeapon() bool {
 }
 
 // Returns the hands that the item is equipped in, as (MH, OH).
-func (character *Character) GetWeaponHands(itemID int32) (mh bool, oh bool) {
+func (character *Character) GetWeaponHands(itemID int32) (bool, bool) {
+	mh := false
+	oh := false
 	if weapon := character.GetMHWeapon(); weapon != nil && weapon.ID == itemID {
 		mh = true
 	}
 	if weapon := character.GetOHWeapon(); weapon != nil && weapon.ID == itemID {
 		oh = true
 	}
-	return
+	return mh, oh
 }
 
 func (character *Character) doneIteration(sim *Simulation) {
@@ -545,9 +414,6 @@ func (character *Character) doneIteration(sim *Simulation) {
 			character.Metrics.AddFinalPetMetrics(&pet.Metrics)
 		}
 	}
-
-	character.Hardcast = Hardcast{}
-	character.doneIterationGCD(sim.Duration)
 
 	character.Unit.doneIteration(sim)
 }
