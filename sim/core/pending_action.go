@@ -30,6 +30,6 @@ type PendingAction struct {
 	cancelled bool
 }
 
-func (pa *PendingAction) Cancel(sim *Simulation) {
+func (pa *PendingAction) Cancel(_ *Simulation) {
 	pa.cancelled = true
 }

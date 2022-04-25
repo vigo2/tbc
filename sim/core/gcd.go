@@ -5,20 +5,6 @@ import (
 	"time"
 )
 
-func (character *Character) newGCDAction(sim *Simulation, agent Agent) *PendingAction {
-	return &PendingAction{
-		Priority: ActionPriorityGCD,
-		OnAction: func(sim *Simulation) bool {
-			character := agent.GetCharacter()
-			character.TryUseCooldowns(sim)
-			if character.GCD.IsReady(sim) {
-				agent.OnGCDReady(sim)
-			}
-			return false
-		},
-	}
-}
-
 // Note that this is only used when the hardcast and GCD actions
 func (character *Character) newHardcastAction(sim *Simulation) {
 	if character.hardcastAction != nil {
@@ -43,26 +29,41 @@ func (character *Character) NextGCDAt() time.Duration {
 func (character *Character) SetGCDTimer(sim *Simulation, gcdReadyAt time.Duration) {
 	character.GCD.Set(gcdReadyAt)
 
-	character.gcdAction.Cancel(sim)
-	oldAction := character.gcdAction.OnAction
+	character.gcdAction.NextActionAt = gcdReadyAt
+	character.gcdActionInvoked = true
 
-	character.gcdAction = &PendingAction{
-		NextActionAt: gcdReadyAt,
-		Priority:     ActionPriorityGCD,
-		OnAction:     oldAction,
+	if character.gcdActionQueued {
+		return
 	}
+
 	sim.AddPendingAction(character.gcdAction)
 }
 
 func (character *Character) EnableGCDTimer(sim *Simulation, agent Agent) {
-	character.gcdAction = character.newGCDAction(sim, agent)
+	character.gcdAction = &PendingAction{
+		Priority: ActionPriorityGCD,
+		OnAction: func(sim *Simulation) bool {
+			character.gcdActionInvoked = false
+			character.gcdActionQueued = true
+			character.TryUseCooldowns(sim)
+			if character.GCD.IsReady(sim) {
+				agent.OnGCDReady(sim)
+			}
+			if !character.gcdActionInvoked {
+				character.gcdActionQueued = false
+				return false
+			}
+			return true
+		},
+	}
+	character.gcdActionInvoked = false
+	character.gcdActionQueued = false
 }
 
 // Call this to stop the GCD loop for a character.
 // This is mostly used for pets that get summoned / expire.
 func (character *Character) CancelGCDTimer(sim *Simulation) {
 	character.gcdAction.Cancel(sim)
-	character.gcdAction = nil
 }
 
 func (character *Character) IsWaiting() bool {

@@ -75,7 +75,10 @@ type Character struct {
 	HasMHWeaponImbue bool
 
 	// GCD-related PendingActions for this character.
-	gcdAction      *PendingAction
+	gcdAction        *PendingAction
+	gcdActionInvoked bool
+	gcdActionQueued  bool
+
 	hardcastAction *PendingAction
 
 	// Fields related to waiting for certain events to happen.
@@ -444,7 +447,7 @@ func (character *Character) reset(sim *Simulation, agent Agent) {
 		petAgent.GetPet().reset(sim, petAgent)
 	}
 
-	character.gcdAction = character.newGCDAction(sim, agent)
+	character.EnableGCDTimer(sim, agent)
 
 	agent.Reset(sim)
 }
